@@ -1,0 +1,27 @@
+{
+  "name": "@nova-lc/family-memory-mcp",
+  "version": "0.1.0",
+  "description": "Multi-user shared-memory MCP server for the Brown family LibreChat instance. Cross-account fact attribution + recall.",
+  "type": "module",
+  "bin": {
+    "family-memory-mcp": "src/index.js"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "mongodb": "^6.10.0",
+    "zod": "^4.4.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NOVA-LC/family-memory-mcp"
+  },
+  "license": "MIT"
+}
