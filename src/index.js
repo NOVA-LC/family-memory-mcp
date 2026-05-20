@@ -12,7 +12,18 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { MongoClient, ObjectId } from 'mongodb';
 import { z } from 'zod';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo.railway.internal:27017';
+// Railway exposes MONGO_URI in the LibreChat service as
+//   mongodb://mongo:"<PASSWORD>"@mongodb.railway.internal:27017
+// — with LITERAL double quotes around the password from the template.
+// MongoClient's URI parser does not like the quotes, so strip them here.
+// Falls back to MONGODB_URI for local dev.
+function normalizeMongoUri(uri) {
+  if (!uri) return uri;
+  // Strip quotes around the userinfo password between ':' and '@'.
+  return uri.replace(/:"([^"@]+)"@/, ':$1@');
+}
+const RAW_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://mongo.railway.internal:27017';
+const MONGODB_URI = normalizeMongoUri(RAW_URI);
 const DB_NAME = process.env.FAMILY_MEMORY_DB || 'test';
 const COLLECTION_NAME = process.env.FAMILY_MEMORY_COLLECTION || 'family_facts';
 
@@ -283,8 +294,10 @@ server.registerTool(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  // Redact credentials from the connection-string before logging.
+  const safeUri = MONGODB_URI.replace(/\/\/([^:]+):[^@]+@/, '//$1:***@');
   process.stderr.write(
-    `[family-memory-mcp] connected as user=${USER_NAME} (${USER_EMAIL}) role=${USER_ROLE} mongo=${MONGODB_URI} db=${DB_NAME}\n`,
+    `[family-memory-mcp] connected as user=${USER_NAME} (${USER_EMAIL}) role=${USER_ROLE} mongo=${safeUri} db=${DB_NAME}\n`,
   );
 }
 
