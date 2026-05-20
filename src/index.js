@@ -7,10 +7,16 @@
 // one stdio child per (user, server) connection, so env is stable for the
 // lifetime of this process and reflects the calling user.
 
+// First-line stderr beacon: proves we got past module load. Anything earlier
+// than this firing in deploy logs means we never executed user code at all.
+process.stderr.write('[family-memory-mcp] booting v0.1.1\n');
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { MongoClient, ObjectId } from 'mongodb';
 import { z } from 'zod';
+
+process.stderr.write('[family-memory-mcp] imports loaded\n');
 
 // Railway exposes MONGO_URI in the LibreChat service as
 //   mongodb://mongo:"<PASSWORD>"@mongodb.railway.internal:27017
@@ -27,16 +33,44 @@ const MONGODB_URI = normalizeMongoUri(RAW_URI);
 const DB_NAME = process.env.FAMILY_MEMORY_DB || 'test';
 const COLLECTION_NAME = process.env.FAMILY_MEMORY_COLLECTION || 'family_facts';
 
+// Diagnostic: log the RESOLVED MongoDB URI (credentials redacted) so we can
+// see in Railway logs whether LibreChat's ${MONGO_URI} substitution actually
+// worked. If we see literal "${MONGO_URI}" or "${{secret(32)}}" here, that's
+// our smoking gun for why the connection's dying.
+function redactUri(uri) {
+  if (!uri) return '(empty)';
+  return uri
+    .replace(/\/\/([^:]+):[^@]+@/, '//$1:***@')
+    .replace(/^(.{0,80}).*$/s, '$1');
+}
+process.stderr.write(
+  `[family-memory-mcp] env check:\n` +
+  `  MONGODB_URI env: ${process.env.MONGODB_URI ? 'set' : 'unset'}\n` +
+  `  MONGO_URI env:   ${process.env.MONGO_URI ? 'set' : 'unset'}\n` +
+  `  RAW_URI (pre-normalize): ${redactUri(RAW_URI)}\n` +
+  `  MONGODB_URI (post-normalize): ${redactUri(MONGODB_URI)}\n` +
+  `  DB_NAME: ${DB_NAME}\n` +
+  `  Contains unresolved template? ${/\$\{|secret\(/.test(RAW_URI) ? 'YES (broken)' : 'no'}\n`,
+);
+
 const USER_ID = process.env.LIBRECHAT_USER_ID || '';
 const USER_EMAIL = process.env.LIBRECHAT_USER_EMAIL || '';
 const USER_NAME = process.env.LIBRECHAT_USER_USERNAME || USER_EMAIL || 'unknown';
 const USER_ROLE = (process.env.LIBRECHAT_USER_ROLE || 'USER').toUpperCase();
 const IS_ADMIN = USER_ROLE === 'ADMIN';
 
-const mongo = new MongoClient(MONGODB_URI, {
-  serverSelectionTimeoutMS: 5000,
-  connectTimeoutMS: 5000,
-});
+let mongo;
+try {
+  mongo = new MongoClient(MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000,
+    connectTimeoutMS: 5000,
+  });
+  process.stderr.write('[family-memory-mcp] MongoClient constructed\n');
+} catch (err) {
+  process.stderr.write(`[family-memory-mcp] FATAL: MongoClient constructor threw: ${err.message}\n`);
+  process.stderr.write(`  URI that failed (redacted): ${redactUri(MONGODB_URI)}\n`);
+  process.exit(2);
+}
 
 let collection = null;
 
