@@ -9,7 +9,16 @@
 
 // First-line stderr beacon: proves we got past module load. Anything earlier
 // than this firing in deploy logs means we never executed user code at all.
-process.stderr.write('[family-memory-mcp] booting v0.1.1\n');
+process.stderr.write('[family-memory-mcp] booting v0.1.2\n');
+
+// FULL env dump (var names + value lengths, NEVER values) so we can see
+// exactly what LibreChat passes to the child process. Critical for
+// diagnosing the ${VAR} substitution and SENSITIVE_ENV_VARS issues.
+const envSummary = Object.entries(process.env)
+  .filter(([k]) => /MONGO|LIBRE|NPM|MCP|FAMILY|HOME|PATH/.test(k))
+  .map(([k, v]) => `  ${k} (len=${(v ?? '').length}): ${(v ?? '').slice(0, 30)}${(v ?? '').length > 30 ? '...' : ''}`)
+  .join('\n');
+process.stderr.write('[family-memory-mcp] env dump (filtered, values truncated to 30 chars):\n' + envSummary + '\n');
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
